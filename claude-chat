@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECTS_DIR="${HOME}/.claude/projects"
+
+usage() { echo "Usage: claude-chat ls | claude-chat rm <id>"; }
+
+get_title() {
+    python3 -c '
+import sys, json
+for line in open(sys.argv[1]):
+    try:
+        obj = json.loads(line)
+        if obj.get("type") == "ai-title":
+            print(obj.get("aiTitle", "Untitled")); sys.exit(0)
+    except Exception: pass
+print("Untitled")
+' "$1"
+}
+
+find_all() {
+    for dir in "$PROJECTS_DIR"/*/; do
+        [[ -d "$dir" ]] || continue
+        for f in "$dir"*.jsonl; do
+            [[ -f "$f" ]] || continue
+            echo "$(basename "$f" .jsonl)|chat|$f"
+        done
+        [[ -d "${dir}memory" ]] || continue
+        for f in "${dir}memory/"*.md; do
+            [[ -f "$f" ]] || continue
+            echo "$(basename "$f")|memory|$f"
+        done
+    done
+}
+
+cmd_ls() {
+    printf "%-40s  %-8s  %s\n" "ID" "TYPE" "TITLE / NAME"
+    printf '%.0s-' {1..80}; echo
+    while IFS='|' read -r id type path; do
+        if [[ "$type" == "chat" ]]; then
+            printf "%-40s  %-8s  %s\n" "$id" "$type" "$(get_title "$path")"
+        else
+            printf "%-40s  %-8s  %s\n" "$id" "$type" "$id"
+        fi
+    done < <(find_all)
+}
+
+cmd_rm() {
+    local id="${1:?Usage: claude-chat rm <id>}"
+    local matches=()
+    while IFS='|' read -r mid mtype mpath; do
+        [[ "$mid" == "$id" ]] && matches+=("$mpath")
+    done < <(find_all)
+
+    if [[ ${#matches[@]} -eq 0 ]]; then
+        echo "No item with id '$id'" >&2; exit 1
+    fi
+    if [[ ${#matches[@]} -gt 1 ]]; then
+        echo "Ambiguous id '$id':" >&2; printf '  %s\n' "${matches[@]}" >&2; exit 1
+    fi
+
+    rm "${matches[0]}"
+    echo "Deleted ${matches[0]}"
+}
+
+case "${1:-help}" in
+    ls) cmd_ls ;;
+    rm) cmd_rm "${2:-}" ;;
+    *)  usage ;;
+esac
