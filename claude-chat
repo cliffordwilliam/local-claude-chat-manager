@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECTS_DIR="${HOME}/.claude/projects"
 
-usage() { echo "Usage: claude-chat ls | claude-chat rm <id>"; }
+usage() { echo "Usage: claude-chat ls | claude-chat rm <id> | claude-chat purge"; }
 
 get_title() {
     python3 -c '
@@ -63,8 +63,19 @@ cmd_rm() {
     echo "Deleted ${matches[0]}"
 }
 
+cmd_purge() {
+    local count=0
+    while IFS='|' read -r id type path; do
+        rm "$path"
+        echo "Deleted $path"
+        (( count++ )) || true
+    done < <(find_all)
+    echo "Purged $count item(s)."
+}
+
 case "${1:-help}" in
-    ls) cmd_ls ;;
-    rm) cmd_rm "${2:-}" ;;
-    *)  usage ;;
+    ls)    cmd_ls ;;
+    rm)    cmd_rm "${2:-}" ;;
+    purge) cmd_purge ;;
+    *)     usage ;;
 esac
